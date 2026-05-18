@@ -46,7 +46,7 @@ def analyze_music(audio_path: Path) -> dict:
     }
 
     resp = httpx.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}",
+        f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent?key={api_key}",
         json=payload,
         timeout=90,
     )
