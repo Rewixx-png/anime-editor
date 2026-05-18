@@ -10,6 +10,8 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message
 from dotenv import load_dotenv
 
+from aiogram.filters import Filter
+
 from bot.agent import parse_request
 from bot.api import app as api_app
 from bot.database import init_db, save_job
@@ -24,9 +26,15 @@ bot = Bot(token=os.environ["TELEGRAM_TOKEN"])
 dp = Dispatcher()
 
 UPLOAD_DIR = Path("data/uploads")
+OWNER_ID = 7485721661
 
 
-@dp.message(CommandStart())
+class IsOwner(Filter):
+    async def __call__(self, msg: Message) -> bool:
+        return msg.from_user.id == OWNER_ID
+
+
+@dp.message(CommandStart(), IsOwner())
 async def cmd_start(msg: Message) -> None:
     await msg.answer(
         "👁️ *Anime Editor*\n\n"
@@ -39,7 +47,7 @@ async def cmd_start(msg: Message) -> None:
     )
 
 
-@dp.message(F.video | F.document)
+@dp.message(F.video | F.document, IsOwner())
 async def handle_video(msg: Message) -> None:
     caption = (msg.caption or "aggressive edit").strip()
     chat_id = msg.chat.id
@@ -62,7 +70,7 @@ async def handle_video(msg: Message) -> None:
     )
 
 
-@dp.message(F.audio | F.voice)
+@dp.message(F.audio | F.voice, IsOwner())
 async def handle_music(msg: Message) -> None:
     await msg.answer(
         "🎵 Музыку получил! Чтобы прикрепить к эдиту — отправь её *вместе* с видео-исходниками одним сообщением (album).",
@@ -70,7 +78,7 @@ async def handle_music(msg: Message) -> None:
     )
 
 
-@dp.message()
+@dp.message(IsOwner())
 async def handle_text(msg: Message) -> None:
     text = (msg.text or "").strip()
     if not text:
