@@ -24,7 +24,21 @@ log = logging.getLogger(__name__)
 _TIME_RE = re.compile(r"time=(\d+):(\d+):([\d.]+)")
 
 
-def _build_filter(effects: WorkerEffects, bpm: Optional[int] = None) -> str:
+def _get_video_size(path: Path) -> tuple[int, int]:
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height",
+             "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=10,
+        )
+        w, h = result.stdout.strip().split(",")
+        return int(w), int(h)
+    except Exception:
+        return 0, 0
+
+
+def _build_filter(effects: WorkerEffects, bpm: Optional[int] = None, video_size: tuple[int, int] = (0, 0)) -> str:
     parts: list[str] = []
 
     if effects.interpolate:
@@ -42,7 +56,11 @@ def _build_filter(effects: WorkerEffects, bpm: Optional[int] = None) -> str:
     if effects.glitch:
         parts.append(GlitchEffect().get_filter(intensity=effects.glitch_intensity))
     if effects.zoom_punch:
-        parts.append(ZoomPunchEffect().get_filter(intensity=effects.zoom_intensity))
+        parts.append(ZoomPunchEffect().get_filter(
+            intensity=effects.zoom_intensity,
+            video_width=video_size[0],
+            video_height=video_size[1],
+        ))
     if effects.speed_lines:
         parts.append(SpeedLinesEffect().get_filter(intensity=effects.speed_lines_intensity))
     if effects.vignette:
@@ -68,7 +86,8 @@ def render(
     on_progress: Optional[Callable[[float], None]] = None,
 ) -> bool:
     output.parent.mkdir(parents=True, exist_ok=True)
-    filter_chain = _build_filter(effects, bpm=bpm)
+    video_size = _get_video_size(clips[0]) if clips else (0, 0)
+    filter_chain = _build_filter(effects, bpm=bpm, video_size=video_size)
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
         for clip in clips:
