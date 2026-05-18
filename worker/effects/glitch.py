@@ -7,5 +7,5 @@ class GlitchEffect(BaseEffect):
         shift = max(1, int(6 * intensity))
         return (
             f"noise=alls={noise_strength}:allf=t+u,"
-            f"rgbshift=rh={shift}:bh=-{shift}"
+            f"rgbashift=rh={shift}:bh=-{shift}"
         )
