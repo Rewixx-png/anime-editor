@@ -66,8 +66,13 @@ def _process(job: WorkerJob) -> None:
     _update_status(job.id, "processing")
     output = RESULTS_DIR / f"{job.id}.mp4"
 
-    log.info("Rendering job %s with %d clips", job.id[:8], len(clips))
-    success = render(clips, job.effects, output, music)
+    log.info("Rendering job %s with %d clips (bpm=%s)", job.id[:8], len(clips), job.bpm)
+    success = render(
+        clips, job.effects, output, music,
+        music_start=job.music_start,
+        music_end=job.music_end,
+        bpm=job.bpm,
+    )
 
     if success and output.exists():
         _update_status(job.id, "done", result_path=str(output))

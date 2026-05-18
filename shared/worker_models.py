@@ -16,6 +16,16 @@ class WorkerEffects:
     glitch_intensity: float = 0.5
     zoom_punch: bool = False
     zoom_intensity: float = 1.2
+    time_remap: bool = False
+    interpolate: bool = False
+    interpolate_fps: int = 60
+    vignette: bool = False
+    vignette_intensity: float = 1.0
+    grain: bool = False
+    grain_intensity: float = 0.5
+    grain_style: str = "film"
+    speed_lines: bool = False
+    speed_lines_intensity: float = 0.5
 
     @classmethod
     def from_dict(cls, d: dict) -> "WorkerEffects":
@@ -32,6 +42,9 @@ class WorkerJob:
     clip_urls: list
     effects: WorkerEffects
     music_file_id: Optional[str] = None
+    music_start: Optional[float] = None
+    music_end: Optional[float] = None
+    bpm: Optional[int] = None
 
     @classmethod
     def from_dict(cls, d: dict) -> "WorkerJob":
@@ -43,6 +56,9 @@ class WorkerJob:
             clip_urls=d.get("clip_urls", []),
             effects=WorkerEffects.from_dict(d.get("effects", {})),
             music_file_id=d.get("music_file_id"),
+            music_start=d.get("music_start"),
+            music_end=d.get("music_end"),
+            bpm=d.get("bpm"),
         )
 
 

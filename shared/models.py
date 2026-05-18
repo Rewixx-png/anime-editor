@@ -1,8 +1,9 @@
+from datetime import datetime
 from enum import Enum
 from typing import Optional
-from pydantic import BaseModel, Field
-from datetime import datetime
 import uuid
+
+from pydantic import BaseModel, Field
 
 
 class EditStyle(str, Enum):
@@ -33,6 +34,16 @@ class EffectConfig(BaseModel):
     glitch_intensity: float = 0.5
     zoom_punch: bool = False
     zoom_intensity: float = 1.2
+    time_remap: bool = False
+    interpolate: bool = False
+    interpolate_fps: int = 60
+    vignette: bool = False
+    vignette_intensity: float = 1.0
+    grain: bool = False
+    grain_intensity: float = 0.5
+    grain_style: str = "film"
+    speed_lines: bool = False
+    speed_lines_intensity: float = 0.5
 
 
 class EditJob(BaseModel):
@@ -44,6 +55,9 @@ class EditJob(BaseModel):
     style: EditStyle = EditStyle.AGGRESSIVE
     clip_urls: list[str] = Field(default_factory=list)
     music_file_id: Optional[str] = None
+    music_start: Optional[float] = None
+    music_end: Optional[float] = None
+    bpm: Optional[int] = None
     effects: EffectConfig = Field(default_factory=EffectConfig)
     result_path: Optional[str] = None
     error_msg: Optional[str] = None
