@@ -50,7 +50,12 @@ def parse_request(text: str, chat_id: int) -> EditJob:
     )
 
     try:
-        data = json.loads(resp.content[0].text)
+        raw = resp.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        data = json.loads(raw.strip())
     except (json.JSONDecodeError, IndexError):
         data = {"character": None, "style": "aggressive"}
 
