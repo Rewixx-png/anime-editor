@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import re
 import subprocess
@@ -36,6 +37,59 @@ def _get_video_size(path: Path) -> tuple[int, int]:
         return int(w), int(h)
     except Exception:
         return 0, 0
+
+
+def _get_video_duration(path: Path) -> float:
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=duration", "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=10,
+        )
+        val = r.stdout.strip()
+        return float(val) if val else 0.0
+    except Exception:
+        return 0.0
+
+
+def _write_concat(
+    f,
+    clips: list[Path],
+    bpm: Optional[float],
+    music_duration: float,
+) -> None:
+    f.write("ffconcat version 1.0\n\n")
+
+    if bpm and music_duration > 2.0:
+        beat = 60.0 / max(60.0, bpm)
+        cut_interval = beat * 2
+        n_cuts = math.ceil(music_duration / cut_interval)
+        src_durations = [_get_video_duration(c) for c in clips]
+        log.info("Beat edit: %d cuts @ %.3fs each, total %.1fs", n_cuts, cut_interval, music_duration)
+
+        for i in range(n_cuts):
+            src_idx = i % len(clips)
+            src = clips[src_idx]
+            src_dur = src_durations[src_idx]
+            if src_dur < 0.1:
+                continue
+            start = (i / n_cuts) * max(0.0, src_dur - cut_interval)
+            end = min(src_dur, start + cut_interval)
+            if end - start < 0.05:
+                continue
+            f.write(f"file '{src.absolute()}'\n")
+            f.write(f"inpoint {start:.3f}\n")
+            f.write(f"outpoint {end:.3f}\n\n")
+    else:
+        write_clips = clips
+        if music_duration > 2.0:
+            total = sum(_get_video_duration(c) for c in clips)
+            if 0 < total < music_duration:
+                loops = math.ceil(music_duration / total)
+                write_clips = clips * loops
+                log.info("Looping clips x%d to fill %.1fs", loops, music_duration)
+        for clip in write_clips:
+            f.write(f"file '{clip.absolute()}'\n")
 
 
 def _build_filter(effects: WorkerEffects, bpm: Optional[int] = None, video_size: tuple[int, int] = (0, 0)) -> str:
@@ -86,12 +140,18 @@ def render(
     on_progress: Optional[Callable[[float], None]] = None,
 ) -> bool:
     output.parent.mkdir(parents=True, exist_ok=True)
+
+    music_duration = 0.0
+    if music_start is not None and music_end is not None:
+        music_duration = music_end - music_start
+    elif music_end is not None:
+        music_duration = music_end
+
     video_size = _get_video_size(clips[0]) if clips else (0, 0)
     filter_chain = _build_filter(effects, bpm=bpm, video_size=video_size)
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-        for clip in clips:
-            f.write(f"file '{clip.absolute()}'\n")
+        _write_concat(f, clips, float(bpm) if bpm else None, music_duration)
         concat_file = f.name
 
     try:
