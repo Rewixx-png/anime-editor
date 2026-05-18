@@ -6,7 +6,7 @@ from pathlib import Path
 import httpx
 from dotenv import load_dotenv
 
-from shared.models import EditJob, JobStatus, JobUpdate
+from shared.worker_models import WorkerJob, WorkerUpdate
 from worker.downloader import download_clip, download_telegram_file
 from worker.pipeline import render
 
@@ -40,7 +40,7 @@ def _send_message(chat_id: int, text: str) -> None:
         client.post(url, json={"chat_id": chat_id, "text": text}, timeout=10)
 
 
-def _process(job: EditJob) -> None:
+def _process(job: WorkerJob) -> None:
     job_dir = WORK_DIR / job.id
     job_dir.mkdir(parents=True, exist_ok=True)
 
@@ -55,7 +55,7 @@ def _process(job: EditJob) -> None:
             clips.append(path)
 
     if not clips:
-        _update_status(job.id, JobStatus.ERROR, error_msg="No clips downloaded")
+        _update_status(job.id, "error", error_msg="No clips downloaded")
         _send_message(job.chat_id, f"❌ Не смог скачать клипы для job {job.id[:8]}")
         return
 
@@ -63,32 +63,32 @@ def _process(job: EditJob) -> None:
     if job.music_file_id:
         music = download_telegram_file(job.music_file_id, BOT_TOKEN, job_dir / "music")
 
-    _update_status(job.id, JobStatus.PROCESSING)
+    _update_status(job.id, "processing")
     output = RESULTS_DIR / f"{job.id}.mp4"
 
     log.info("Rendering job %s with %d clips", job.id[:8], len(clips))
     success = render(clips, job.effects, output, music)
 
     if success and output.exists():
-        _update_status(job.id, JobStatus.DONE, result_path=str(output))
+        _update_status(job.id, "done", result_path=str(output))
         _send_video(job.chat_id, output, f"✅ {job.request}")
     else:
-        _update_status(job.id, JobStatus.ERROR, error_msg="FFmpeg render failed")
+        _update_status(job.id, "error", error_msg="FFmpeg render failed")
         _send_message(job.chat_id, f"❌ Ошибка рендера для job {job.id[:8]}")
 
 
 def _update_status(
     job_id: str,
-    status: JobStatus,
+    status: str,
     result_path: str | None = None,
     error_msg: str | None = None,
 ) -> None:
-    update = JobUpdate(status=status, result_path=result_path, error_msg=error_msg)
+    update = WorkerUpdate(status=status, result_path=result_path, error_msg=error_msg)
     try:
         with httpx.Client() as client:
             client.put(
                 f"{VPS_URL}/jobs/{job_id}",
-                json=update.model_dump(),
+                json=update.to_dict(),
                 headers=_headers(),
                 timeout=10,
             )
@@ -105,7 +105,7 @@ def run() -> None:
         try:
             with httpx.Client() as client:
                 resp = client.get(f"{VPS_URL}/jobs/pending", headers=_headers(), timeout=10)
-                jobs = [EditJob.model_validate(j) for j in resp.json()]
+                jobs = [WorkerJob.from_dict(j) for j in resp.json()]
 
             for job in jobs:
                 log.info("Processing job %s (%s)", job.id[:8], job.request[:40])
@@ -113,7 +113,7 @@ def run() -> None:
                     _process(job)
                 except Exception as exc:
                     log.exception("Job %s failed: %s", job.id[:8], exc)
-                    _update_status(job.id, JobStatus.ERROR, error_msg=str(exc))
+                    _update_status(job.id, "error", error_msg=str(exc))
                     _send_message(job.chat_id, f"❌ Ошибка: {exc}")
 
         except httpx.RequestError as exc:

@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
-from shared.models import EffectConfig
+from shared.worker_models import WorkerEffects
 from worker.effects.blur import MotionBlurEffect
 from worker.effects.chromatic import ChromaticEffect
 from worker.effects.color import ColorEffect
@@ -13,7 +13,7 @@ from worker.effects.shake import ShakeEffect
 from worker.effects.zoom import ZoomPunchEffect
 
 
-def _build_filter(effects: EffectConfig) -> str:
+def _build_filter(effects: WorkerEffects) -> str:
     parts: list[str] = []
 
     if effects.color_grade:
@@ -34,7 +34,7 @@ def _build_filter(effects: EffectConfig) -> str:
 
 def render(
     clips: list[Path],
-    effects: EffectConfig,
+    effects: WorkerEffects,
     output: Path,
     music: Optional[Path] = None,
 ) -> bool:
