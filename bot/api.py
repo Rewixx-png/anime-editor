@@ -1,17 +1,19 @@
 import os
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Header
 
 from bot.database import get_job, get_pending_jobs, update_job
 from shared.models import EditJob, JobStatus, JobUpdate
 
-app = FastAPI()
+load_dotenv()
 
-_API_KEY = os.getenv("WORKER_API_KEY", "change-me")
+app = FastAPI()
 
 
 def _auth(key: str) -> None:
-    if key != _API_KEY:
+    api_key = os.getenv("WORKER_API_KEY", "change-me")
+    if key != api_key:
         raise HTTPException(status_code=403)
 
 

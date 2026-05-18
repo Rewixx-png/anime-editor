@@ -105,7 +105,11 @@ def run() -> None:
         try:
             with httpx.Client() as client:
                 resp = client.get(f"{VPS_URL}/jobs/pending", headers=_headers(), timeout=10)
-                jobs = [WorkerJob.from_dict(j) for j in resp.json()]
+            if resp.status_code != 200:
+                log.warning("API returned %d: %s", resp.status_code, resp.text[:100])
+                time.sleep(POLL_INTERVAL)
+                continue
+            jobs = [WorkerJob.from_dict(j) for j in resp.json()]
 
             for job in jobs:
                 log.info("Processing job %s (%s)", job.id[:8], job.request[:40])
