@@ -44,8 +44,11 @@ def _process(job: WorkerJob) -> None:
     job_dir = WORK_DIR / job.id
     job_dir.mkdir(parents=True, exist_ok=True)
 
-    with httpx.Client() as client:
-        client.post(f"{VPS_URL}/jobs/{job.id}/claim", headers=_headers())
+    try:
+        with httpx.Client() as client:
+            client.post(f"{VPS_URL}/jobs/{job.id}/claim", headers=_headers(), timeout=15)
+    except httpx.RequestError as e:
+        log.warning("Claim request failed (continuing anyway): %s", e)
 
     log.info("Downloading %d clips for job %s", len(job.clip_urls), job.id[:8])
     clips: list[Path] = []
