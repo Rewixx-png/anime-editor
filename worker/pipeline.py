@@ -50,7 +50,7 @@ def _build_filter(effects: WorkerEffects, bpm: Optional[int] = None) -> str:
     if effects.grain:
         parts.append(GrainEffect().get_filter(intensity=effects.grain_intensity, style=effects.grain_style))
 
-    return ",".join(parts) if parts else "null"
+    return ",".join(parts) if parts else "copy"
 
 
 def _parse_seconds(h: str, m: str, s: str) -> float:
@@ -114,8 +114,10 @@ def render(
 
         proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, text=True)
         last_report = 0.0
+        stderr_lines: list[str] = []
 
         for line in proc.stderr:
+            stderr_lines.append(line)
             m = _TIME_RE.search(line)
             if m and on_progress:
                 secs = _parse_seconds(m.group(1), m.group(2), m.group(3))
@@ -124,6 +126,9 @@ def render(
                     last_report = secs
 
         proc.wait(timeout=600)
+        if proc.returncode != 0:
+            log.error("FFmpeg failed (rc=%d):\n%s", proc.returncode,
+                      "".join(stderr_lines[-30:]))
         return proc.returncode == 0
     except subprocess.TimeoutExpired:
         proc.kill()
