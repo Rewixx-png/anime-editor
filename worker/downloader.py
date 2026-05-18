@@ -8,7 +8,7 @@ import httpx
 log = logging.getLogger(__name__)
 
 
-def download_clip(url: str, dest_dir: Path) -> Optional[Path]:
+def download_clip(url: str, dest_dir: Path, bot_token: str = "") -> Optional[Path]:
     dest_dir.mkdir(parents=True, exist_ok=True)
 
     if url.startswith("local:"):
@@ -17,6 +17,11 @@ def download_clip(url: str, dest_dir: Path) -> Optional[Path]:
             log.error("Local clip not found: %s", local)
             return None
         return local
+
+    if url.startswith("tg:"):
+        file_id = url[3:]
+        log.info("Downloading clip from Telegram: %s", file_id[:20])
+        return download_telegram_file(file_id, bot_token, dest_dir)
 
     log.info("Downloading: %s", url)
     try:

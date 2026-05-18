@@ -53,7 +53,7 @@ def _process(job: WorkerJob) -> None:
     log.info("Downloading %d clips for job %s", len(job.clip_urls), job.id[:8])
     clips: list[Path] = []
     for url in job.clip_urls:
-        path = download_clip(url, job_dir / "clips")
+        path = download_clip(url, job_dir / "clips", bot_token=BOT_TOKEN)
         if path:
             clips.append(path)
 

@@ -52,7 +52,7 @@ async def _finalize_job(chat_id: int, caption: str, msg: Message) -> None:
 
     vid = _pending_video.pop(chat_id, None)
     if vid:
-        job.clip_urls = [f"local:{vid['path']}"]
+        job.clip_urls = [f"tg:{vid['file_id']}"]
     else:
         status_msg = await msg.answer("🔍 Ищу клипы...")
         if not job.character:
@@ -142,13 +142,8 @@ async def handle_video(msg: Message) -> None:
     caption = (msg.caption or "").strip()
 
     file_obj = msg.video or msg.document
-    file = await bot.get_file(file_obj.file_id)
-    save_dir = UPLOAD_DIR / str(chat_id)
-    save_dir.mkdir(parents=True, exist_ok=True)
-    local_path = save_dir / Path(file.file_path).name
-    await bot.download_file(file.file_path, local_path)
 
-    _pending_video[chat_id] = {"path": str(local_path.absolute()), "caption": caption}
+    _pending_video[chat_id] = {"file_id": file_obj.file_id, "caption": caption}
 
     if caption:
         await _finalize_job(chat_id, caption, msg)
