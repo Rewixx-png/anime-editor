@@ -1,8 +1,10 @@
+import logging
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from shared.worker_models import WorkerEffects
 from worker.effects.blur import MotionBlurEffect
@@ -17,44 +19,42 @@ from worker.effects.timeremap import TimeRemapEffect
 from worker.effects.vignette import VignetteEffect
 from worker.effects.zoom import ZoomPunchEffect
 
+log = logging.getLogger(__name__)
+
+_TIME_RE = re.compile(r"time=(\d+):(\d+):([\d.]+)")
+
 
 def _build_filter(effects: WorkerEffects, bpm: Optional[int] = None) -> str:
     parts: list[str] = []
 
     if effects.interpolate:
         parts.append(FrameInterpolationEffect().get_filter(target_fps=effects.interpolate_fps))
-
     if effects.time_remap:
         parts.append(TimeRemapEffect().get_filter(bpm=float(bpm or 120)))
-
     if effects.color_grade:
         parts.append(ColorEffect().get_filter(style=effects.color_style))
-
     if effects.chromatic:
         parts.append(ChromaticEffect().get_filter(offset=effects.chromatic_offset))
-
     if effects.shake:
         parts.append(ShakeEffect().get_filter(intensity=effects.shake_intensity))
-
     if effects.motion_blur:
         parts.append(MotionBlurEffect().get_filter(strength=effects.blur_strength))
-
     if effects.glitch:
         parts.append(GlitchEffect().get_filter(intensity=effects.glitch_intensity))
-
     if effects.zoom_punch:
         parts.append(ZoomPunchEffect().get_filter(intensity=effects.zoom_intensity))
-
     if effects.speed_lines:
         parts.append(SpeedLinesEffect().get_filter(intensity=effects.speed_lines_intensity))
-
     if effects.vignette:
         parts.append(VignetteEffect().get_filter(intensity=effects.vignette_intensity))
-
     if effects.grain:
         parts.append(GrainEffect().get_filter(intensity=effects.grain_intensity, style=effects.grain_style))
 
     return ",".join(parts) if parts else "null"
+
+
+def _parse_seconds(h: str, m: str, s: str) -> float:
+    return int(h) * 3600 + int(m) * 60 + float(s)
 
 
 def render(
@@ -65,6 +65,7 @@ def render(
     music_start: Optional[float] = None,
     music_end: Optional[float] = None,
     bpm: Optional[int] = None,
+    on_progress: Optional[Callable[[float], None]] = None,
 ) -> bool:
     output.parent.mkdir(parents=True, exist_ok=True)
     filter_chain = _build_filter(effects, bpm=bpm)
@@ -75,10 +76,7 @@ def render(
         concat_file = f.name
 
     try:
-        cmd = [
-            "ffmpeg", "-y",
-            "-f", "concat", "-safe", "0", "-i", concat_file,
-        ]
+        cmd = ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", concat_file]
 
         has_music = music and music.exists()
         if has_music:
@@ -91,7 +89,7 @@ def render(
                 audio_filter += f":end={music_end:.3f}"
             audio_filter += ",asetpts=PTS-STARTPTS[aout]"
             cmd += [
-                "-filter_complex", f"{audio_filter}",
+                "-filter_complex", audio_filter,
                 "-vf", filter_chain,
                 "-map", "0:v",
                 "-map", "[aout]",
@@ -110,10 +108,26 @@ def render(
             "-crf", "23",
             "-c:a", "aac",
             "-b:a", "192k",
+            "-stats_period", "3",
             str(output),
         ]
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-        return result.returncode == 0
+        proc = subprocess.Popen(cmd, stderr=subprocess.PIPE, text=True)
+        last_report = 0.0
+
+        for line in proc.stderr:
+            m = _TIME_RE.search(line)
+            if m and on_progress:
+                secs = _parse_seconds(m.group(1), m.group(2), m.group(3))
+                if secs - last_report >= 5.0:
+                    on_progress(secs)
+                    last_report = secs
+
+        proc.wait(timeout=600)
+        return proc.returncode == 0
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        log.error("FFmpeg timed out")
+        return False
     finally:
         os.unlink(concat_file)
