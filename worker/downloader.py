@@ -1,9 +1,11 @@
-import os
+import logging
 import subprocess
 from pathlib import Path
 from typing import Optional
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 
 def download_clip(url: str, dest_dir: Path) -> Optional[Path]:
@@ -11,8 +13,12 @@ def download_clip(url: str, dest_dir: Path) -> Optional[Path]:
 
     if url.startswith("local:"):
         local = Path(url[6:])
-        return local if local.exists() else None
+        if not local.exists():
+            log.error("Local clip not found: %s", local)
+            return None
+        return local
 
+    log.info("Downloading: %s", url)
     try:
         result = subprocess.run(
             [
@@ -21,17 +27,26 @@ def download_clip(url: str, dest_dir: Path) -> Optional[Path]:
                 "--merge-output-format", "mp4",
                 "-o", str(dest_dir / "%(id)s.%(ext)s"),
                 "--no-playlist",
+                "--retries", "3",
                 url,
             ],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=180,
         )
         if result.returncode != 0:
+            log.error("yt-dlp failed (rc=%d):\n%s", result.returncode, result.stderr[-800:])
             return None
         downloaded = sorted(dest_dir.glob("*.mp4"), key=lambda p: p.stat().st_mtime)
-        return downloaded[-1] if downloaded else None
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+        if not downloaded:
+            log.error("yt-dlp succeeded but no .mp4 found in %s", dest_dir)
+            return None
+        return downloaded[-1]
+    except subprocess.TimeoutExpired:
+        log.error("yt-dlp timed out for %s", url)
+        return None
+    except FileNotFoundError:
+        log.error("yt-dlp not found — install it in Termux: pip install yt-dlp")
         return None
 
 
