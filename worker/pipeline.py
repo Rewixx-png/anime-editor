@@ -187,6 +187,7 @@ def render(
     music_start: Optional[float] = None,
     music_end: Optional[float] = None,
     bpm: Optional[int] = None,
+    drops: Optional[list[float]] = None,
     on_progress: Optional[Callable[[float], None]] = None,
 ) -> bool:
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -198,7 +199,13 @@ def render(
         music_duration = music_end
 
     video_size = _get_video_size(clips[0]) if clips else (0, 0)
-    filter_chain = _build_filter(effects, bpm=bpm, video_size=video_size)
+    filter_chain = _build_filter(
+        effects,
+        bpm=bpm,
+        video_size=video_size,
+        drops=drops,
+        music_start=music_start or 0.0,
+    )
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
         _write_concat(f, clips, float(bpm) if bpm else None, music_duration)
