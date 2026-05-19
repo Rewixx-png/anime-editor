@@ -76,6 +76,7 @@ async def _finalize_job(chat_id: int, caption: str, msg: Message) -> None:
         job.music_start = mus.get("start")
         job.music_end = mus.get("end")
         job.bpm = mus.get("bpm")
+        job.drops = mus.get("drops", [])
 
     save_job(job)
 
@@ -173,12 +174,15 @@ async def handle_music(msg: Message) -> None:
             "end": analysis["end"],
             "bpm": analysis["bpm"],
             "energy": analysis["energy"],
+            "drops": analysis.get("drops", []),
         }
         status = _pending_status(chat_id)
+        drops = analysis.get("drops", [])
+        drops_note = f" · 🔥 {len(drops)} дропов" if drops else ""
         await status_msg.edit_text(
             f"✅ Трек проанализирован!\n"
             f"🎯 `{analysis['start']:.1f}s – {analysis['end']:.1f}s` · "
-            f"BPM `{analysis['bpm']}` · Энергия `{analysis['energy']}`\n\n"
+            f"BPM `{analysis['bpm']}` · Энергия `{analysis['energy']}`{drops_note}\n\n"
             f"{status}",
             parse_mode="Markdown",
         )

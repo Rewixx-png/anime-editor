@@ -45,6 +45,7 @@ class WorkerJob:
     music_start: Optional[float] = None
     music_end: Optional[float] = None
     bpm: Optional[int] = None
+    drops: list = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, d: dict) -> "WorkerJob":
@@ -59,6 +60,7 @@ class WorkerJob:
             music_start=d.get("music_start"),
             music_end=d.get("music_end"),
             bpm=d.get("bpm"),
+            drops=[float(x) for x in d.get("drops", [])],
         )
 
 

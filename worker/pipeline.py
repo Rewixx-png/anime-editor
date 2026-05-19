@@ -92,23 +92,77 @@ def _write_concat(
             f.write(f"file '{clip.absolute()}'\n")
 
 
-def _build_filter(effects: WorkerEffects, bpm: Optional[int] = None, video_size: tuple[int, int] = (0, 0)) -> str:
+_BASE_VIGNETTE_ANGLE = 0.35
+_DROP_VIGNETTE_ANGLE = 0.85
+_DROP_WINDOW_PRE = 0.1
+_DROP_WINDOW_POST = 0.4
+
+
+def _build_filter(
+    effects: WorkerEffects,
+    bpm: Optional[int] = None,
+    video_size: tuple[int, int] = (0, 0),
+    drops: Optional[list[float]] = None,
+    music_start: float = 0.0,
+) -> str:
+    """Compose FFmpeg filter chain.
+
+    Drops (absolute music timestamps) are converted to output-relative time
+    (subtract music_start) and used to gate punchy effects via
+    `enable='between(t,X,Y)'`. Each drop fires a 0.5s window.
+
+    Strategy:
+      - Always-on base: color grade, motion blur, soft vignette, grain
+      - Drop-triggered punches: chromatic spike, vignette tighten, glitch noise
+      - Non-timeline filters (zoompan, setpts) stay always-on
+    """
     parts: list[str] = []
+
+    output_drops: list[float] = []
+    if drops:
+        offset = music_start or 0.0
+        output_drops = sorted(
+            max(0.0, d - offset) for d in drops if d >= offset - 0.5
+        )
 
     if effects.interpolate:
         parts.append(FrameInterpolationEffect().get_filter(target_fps=effects.interpolate_fps))
     if effects.time_remap:
         parts.append(TimeRemapEffect().get_filter(bpm=float(bpm or 120)))
+
     if effects.color_grade:
         parts.append(ColorEffect().get_filter(style=effects.color_style))
-    if effects.chromatic:
-        parts.append(ChromaticEffect().get_filter(offset=effects.chromatic_offset))
-    if effects.shake:
-        parts.append(ShakeEffect().get_filter(intensity=effects.shake_intensity))
     if effects.motion_blur:
         parts.append(MotionBlurEffect().get_filter(strength=effects.blur_strength))
-    if effects.glitch:
-        parts.append(GlitchEffect().get_filter(intensity=effects.glitch_intensity))
+    if effects.shake:
+        parts.append(ShakeEffect().get_filter(intensity=effects.shake_intensity))
+    if effects.vignette:
+        parts.append(f"vignette=angle={_BASE_VIGNETTE_ANGLE}:mode=forward")
+
+    if output_drops:
+        # OR-combine windows: each between() returns 0/1, sum != 0 → enabled.
+        gate = "+".join(
+            f"between(t,{max(0.0, d - _DROP_WINDOW_PRE):.3f},{d + _DROP_WINDOW_POST:.3f})"
+            for d in output_drops
+        )
+        if effects.chromatic:
+            shift = max(3, int(effects.chromatic_offset * 1.5))
+            parts.append(
+                f"rgbashift=rh={shift}:rv=0:bh=-{shift}:bv=0:enable='{gate}'"
+            )
+        if effects.vignette:
+            parts.append(f"vignette=angle={_DROP_VIGNETTE_ANGLE}:mode=forward:enable='{gate}'")
+        if effects.glitch:
+            noise_amt = max(20, int(40 * effects.glitch_intensity))
+            parts.append(f"noise=alls={noise_amt}:allf=t+u:enable='{gate}'")
+    else:
+        if effects.chromatic:
+            parts.append(ChromaticEffect().get_filter(offset=effects.chromatic_offset))
+        if effects.glitch:
+            parts.append(GlitchEffect().get_filter(intensity=effects.glitch_intensity))
+
+    if effects.grain:
+        parts.append(GrainEffect().get_filter(intensity=effects.grain_intensity, style=effects.grain_style))
     if effects.zoom_punch:
         parts.append(ZoomPunchEffect().get_filter(
             intensity=effects.zoom_intensity,
@@ -117,10 +171,6 @@ def _build_filter(effects: WorkerEffects, bpm: Optional[int] = None, video_size:
         ))
     if effects.speed_lines:
         parts.append(SpeedLinesEffect().get_filter(intensity=effects.speed_lines_intensity))
-    if effects.vignette:
-        parts.append(VignetteEffect().get_filter(intensity=effects.vignette_intensity))
-    if effects.grain:
-        parts.append(GrainEffect().get_filter(intensity=effects.grain_intensity, style=effects.grain_style))
 
     return ",".join(parts) if parts else "copy"
 

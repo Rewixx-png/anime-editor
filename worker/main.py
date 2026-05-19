@@ -120,6 +120,7 @@ def _process(job: WorkerJob) -> None:
         music_start=job.music_start,
         music_end=job.music_end,
         bpm=job.bpm,
+        drops=job.drops,
         on_progress=on_progress,
     )
 

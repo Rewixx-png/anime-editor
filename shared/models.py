@@ -58,6 +58,7 @@ class EditJob(BaseModel):
     music_start: Optional[float] = None
     music_end: Optional[float] = None
     bpm: Optional[int] = None
+    drops: list[float] = Field(default_factory=list)
     effects: EffectConfig = Field(default_factory=EffectConfig)
     result_path: Optional[str] = None
     error_msg: Optional[str] = None
