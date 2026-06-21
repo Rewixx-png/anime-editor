@@ -1,0 +1,7 @@
+services:
+  anime-editor-bot:
+    build: .
+    container_name: anime_editor_bot
+    restart: unless-stopped
+    env_file:
+      - .env

@@ -18,3 +18,10 @@ build/
 # System
 .DS_Store
 *.log
+*.mp4
+*.zip
+*.pth
+*.tar.gz
+*.rar
+*.db
+*.pth.tar
